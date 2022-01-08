@@ -46,7 +46,6 @@ func makeDir(src, dst string) error {
 				if _, err := os.Stat(destination); os.IsNotExist(err) {
 					filesList = append(filesList, path)
 					//log.Println(reset, "Adding to fileList", path)
-
 				}
 			}
 			return nil
