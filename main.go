@@ -12,9 +12,7 @@ import (
 	//"golang.org/x/crypto/sha3"
 )
 
-//Resets back to Original terminal color. Must use at end of program to reset terminal for other applications.
-var r string = "\033[0m"
-
+var r string = "\033[0m" //Resets back to Original terminal color. Must use at end of program to reset terminal for other applications.
 var red string = "\033[31m"
 var green string = "\033[32m"
 var yellow string = "\033[33m"
@@ -23,89 +21,91 @@ var purple string = "\033[35m"
 var cyan string = "\033[36m"
 var white string = "\033[37m"
 
-var filesList []string
+var srcFiles []string
+var dstFiles []string
 
-func TrimSuffix(s, suffix string) string {
-	if strings.HasSuffix(s, suffix) {
-		s = s[:len(s)-len(suffix)]
+var modifyPath string
+var sources string
+var destination string
+
+//TODO Rename and still not sure if I need anymore
+func RenameLater() {
+	res1 := strings.HasSuffix(destination, "\\")
+	if !res1 {
+		destination = destination + "\\" //	l.Println(red, "Running", destination, r)
+
 	}
-	return s
 }
 
-func MakeDir(src, dst string) {
+func MakeDir() {
 	f.Println(cyan, "Scanning For Files and Creating Directory")
 
-	filepath.Walk(src,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
+	RenameLater()
+
+	filepath.Walk(sources, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		dstPath := TrimSuffixAndNewDestination(srcPath)
+		if _, modPath := os.Stat(dstPath); os.IsNotExist(modPath) { //Checks to see if the destination already exists
+			if info.IsDir() { //Checks to see if it's a directory
+				os.MkdirAll(dstPath, os.ModePerm) //Makes the directory
+			} else { //Runs if it's a file
+				srcFiles = append(srcFiles, srcPath)
+				dstFiles = append(dstFiles, dstPath)
 			}
 
-			if info.IsDir() {
-				//l.Println(green, path)
-				os.MkdirAll(strings.ReplaceAll(path, src, dst), os.ModePerm)
-			} else {
-				destination := FinalDestination(path, src, dst)
-				if _, err := os.Stat(destination); os.IsNotExist(err) {
-					filesList = append(filesList, path)
-					//l.Println(r, "Adding to fileList", path)
-				}
-			}
-			return nil
-		})
+		}
+		return nil
+	})
 }
 
-func FinalDestination(filepath string, sources string, destination string) string {
-	//src: fileList | dst: Z:\test | remove_src: C:\Users\magic\Downloads\
-	firstPart := strings.ReplaceAll(sources, sources, destination) //path, old, new
+func TrimSuffixAndNewDestination(file string) string {
+	if hasSuffix := strings.HasSuffix(file, "\\"); hasSuffix {
+		file = file[:len(file)-len("\\")]
+	}
+	//removeBeginning := strings.ReplaceAll(file, sources, modifyPath)
+	//newDst := modifyPath + removeBeginning
 
-	lastPart := strings.ReplaceAll(filepath, sources, "") //Removes the Beginning /home/ of the s path so it can be used to use the correct path for the destination
-
-	//Rewrites it from D:\Skyrim-copy\\ to D:\Skyrim-copy\ removing the extra \ a the end
-	newDest := TrimSuffix(firstPart, "\\") + lastPart
-
-	return newDest
-
+	return strings.ReplaceAll(file, sources, modifyPath)
 }
 
-var tJobs int64 = 0
+func CheckFileSize(file string) int64 {
+	var buff int64
 
-func Copy(id int, jobs <-chan int, results chan<- int, sources string, destination string) {
+	stats, err := os.Stat(file)
+	if err != nil {
+		l.Fatalln("funcCheckFileSize")
+	}
+	if stats.Size() > 2000000000 {
+		buff = 2000000000
+	} else {
+		buff = stats.Size()
+	}
+
+	return buff
+}
+
+func Copy(id int, jobs <-chan int, results chan<- int) {
 	for j := range jobs {
-		var buff int64 = 10
+		src := srcFiles[j]
+		dst := dstFiles[j]
 
-		filepath := filesList[j] //Gets the file that will be moved over by index of the jobs chan
+		var buff int64 = CheckFileSize(src)
 
-		newDest := FinalDestination(filepath, sources, destination)
+		//newDst := TrimSuffixAndNewDestination(file)
 
-		l.Println(r, "filepath:", filepath, "\n", "newdest", newDest, r)
-
-		stats, err := os.Stat(filepath)
+		source, err := os.Open(src)
 		if err != nil {
-			l.Fatalln("1")
-		}
-
-		l.Println(cyan, "Worker ID:", id, "Copying:", filepath, "Size", stats.Size(), r)
-
-		if stats.Size() > 2000000000 {
-			buff = 2000000000
-		} else {
-			buff = stats.Size()
-		}
-
-		//l.Println(red, "buff", buff, r)
-
-		source, err := os.Open(filepath)
-		if err != nil {
-			l.Fatalln("2")
+			l.Fatalln("var source := os.Open(file)")
 		}
 		defer source.Close()
 
-		//srcHash := createHash(filepath)
+		//srcHash := createHash(file)
 
-		//createHash(filepath)
+		//createHash(file)
 
-		destination, err := os.Create(newDest)
+		destination, err := os.Create(dst)
 		if err != nil {
 			l.Fatalln("3")
 		}
@@ -114,26 +114,18 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 		buf := make([]byte, buff)
 		for {
 			n, err := source.Read(buf)
-
 			if err != nil && err != io.EOF {
 				l.Fatalln("4")
 			}
-
 			if n == 0 {
 				break
 			}
-
 			if _, err := destination.Write(buf[:n]); err != nil {
 				l.Fatalln("5")
 			}
 		}
-
-		tJobs++
-
 		results <- j * 2
-
 		l.Println(yellow, "Finished Worker:", id, r)
-
 	}
 }
 
@@ -157,73 +149,59 @@ func createHash(src string)[]byte {
 
 }*/
 
-func main() {
-	/*if len(os.Args) != 3 {
-		f.Printf("usage: %s source destination BUFFERSIZE\n", filepath.Base(os.Args[0]))
-		return
-	}*/
-
-	//l.Println(r)
-
-	threads, err := strconv.ParseInt(os.Args[1], 10, 64)
-	if err != nil {
-		f.Printf("Invalid buffer size: %q\n", err)
-		return
-	}
-	sources := os.Args[2]
-	destination := os.Args[3]
-
-	//Not sure if I need this anymore
-	res1 := strings.HasSuffix(destination, "\\")
-	if !res1 {
-		destination = destination + "\\"
-
-		//	l.Println(red, "Running", destination, r)
-	}
-
-	/*path, err := os.Open(sources)
-	if err != nil {
-		// handle the error and return
-		l.Fatalln("Hello")
-	}
-
-	pathInfo, err := path.Stat()
-	if err != nil {
-		// error handling
-		l.Fatalln("Hello")
-	}
-
-	// IsDir is short for fileInfo.Mode().IsDir()
-	if pathInfo.IsDir() {
-		// file is a directory
-		l.Fatalln("Hello")
-
-	} else {
-		// file is not a directory
-	}
-	defer path.Close()*/
-
-	MakeDir(sources, destination)
-
-	numJobs := len(filesList)
-	jobs := make(chan int, numJobs)
-	results := make(chan int, numJobs)
-
+func MakeWorkers(jobs <-chan int, results chan<- int, threads int) {
 	for id := 1; id <= int(threads); id++ {
-		go Copy(id, jobs, results, sources, destination)
+		go Copy(id, jobs, results)
 	}
 
+}
+
+func AddFilesToChannelJobs(jobs chan<- int, numJobs int) {
 	for j := 0; j <= numJobs; j++ {
 		if j < numJobs { //This if is for making sure that we don't go over the index of the fileList slice
 			jobs <- j
 		}
 	}
-
 	close(jobs)
+}
 
+func CheckForResults(results <-chan int, numJobs int) {
 	for a := 1; a <= numJobs; a++ {
 		<-results
 	}
+}
 
-	f.Println(r, "Done", tJobs)
+func main() {
+	/*if len(os.Args) != 3 {
+	f.Printf("usage: %s source destination BUFFERSIZE\n", filepath.Base(os.Args[0]))
+	return
+	}*/
+
+	threads, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		f.Printf("Invalid Threads size: %q\n", err)
+		return
+	}
+	sources = os.Args[2]
+	destination = os.Args[3]
+
+	modifyPath = strings.ReplaceAll(sources, sources, destination) // /home/deathpoolops/test/hello to /new/dst/test/hello
+
+	MakeDir()
+
+	if len(srcFiles) != len(dstFiles) {
+		panic(len(srcFiles))
+	}
+
+	buffSize := len(srcFiles)
+	jobs := make(chan int, buffSize)
+	results := make(chan int, buffSize)
+
+	MakeWorkers(jobs, results, threads)
+
+	AddFilesToChannelJobs(jobs, buffSize)
+
+	CheckForResults(results, buffSize)
+
+	f.Println(r, "Done", buffSize)
 }
