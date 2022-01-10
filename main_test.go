@@ -1,27 +1,14 @@
-package main
+package main_test
 
 import (
-	//"bytes"
-	f "fmt"
+	"testing"
 	"io"
-	l "log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	//"golang.org/x/crypto/sha3"
+	l "log"
+
 )
-
-//Resets back to Original terminal color. Must use at end of program to reset terminal for other applications.
-var r string = "\033[0m"
-
-var red string = "\033[31m"
-var green string = "\033[32m"
-var yellow string = "\033[33m"
-var blue string = "\033[34m"
-var purple string = "\033[35m"
-var cyan string = "\033[36m"
-var white string = "\033[37m"
 
 var filesList []string
 
@@ -33,8 +20,6 @@ func TrimSuffix(s, suffix string) string {
 }
 
 func MakeDir(src, dst string) {
-	f.Println(cyan, "Scanning For Files and Creating Directory")
-
 	filepath.Walk(src,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -42,17 +27,17 @@ func MakeDir(src, dst string) {
 			}
 
 			if info.IsDir() {
-				//l.Println(green, path)
+				l.Println(path)
 				os.MkdirAll(strings.ReplaceAll(path, src, dst), os.ModePerm)
 			} else {
 				destination := FinalDestination(path, src, dst)
 				if _, err := os.Stat(destination); os.IsNotExist(err) {
 					filesList = append(filesList, path)
-					//l.Println(r, "Adding to fileList", path)
+					l.Println("Adding to fileList", path)
 				}
 			}
-			return nil
-		})
+		return nil
+	})
 }
 
 func FinalDestination(filepath string, sources string, destination string) string {
@@ -68,8 +53,6 @@ func FinalDestination(filepath string, sources string, destination string) strin
 
 }
 
-var tJobs int64 = 0
-
 func Copy(id int, jobs <-chan int, results chan<- int, sources string, destination string) {
 	for j := range jobs {
 		var buff int64 = 10
@@ -78,14 +61,7 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 
 		newDest := FinalDestination(filepath, sources, destination)
 
-		l.Println(r, "filepath:", filepath, "\n", "newdest", newDest, r)
-
 		stats, err := os.Stat(filepath)
-		if err != nil {
-			l.Fatalln("1")
-		}
-
-		l.Println(cyan, "Worker ID:", id, "Copying:", filepath, "Size", stats.Size(), r)
 
 		if stats.Size() > 2000000000 {
 			buff = 2000000000
@@ -93,11 +69,10 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 			buff = stats.Size()
 		}
 
-		//l.Println(red, "buff", buff, r)
 
 		source, err := os.Open(filepath)
 		if err != nil {
-			l.Fatalln("2")
+
 		}
 		defer source.Close()
 
@@ -107,7 +82,6 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 
 		destination, err := os.Create(newDest)
 		if err != nil {
-			l.Fatalln("3")
 		}
 		defer destination.Close()
 
@@ -116,7 +90,6 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 			n, err := source.Read(buf)
 
 			if err != nil && err != io.EOF {
-				l.Fatalln("4")
 			}
 
 			if n == 0 {
@@ -124,84 +97,18 @@ func Copy(id int, jobs <-chan int, results chan<- int, sources string, destinati
 			}
 
 			if _, err := destination.Write(buf[:n]); err != nil {
-				l.Fatalln("5")
 			}
 		}
 
-		tJobs++
-
 		results <- j * 2
-
-		l.Println(yellow, "Finished Worker:", id, r)
 
 	}
 }
 
-/*
-func createHash(src string)[]byte {
-	input := strings.NewReader(src)
-	hash := sha3.New512()
-
-	if _, err := io.Copy(hash, input); err != nil {
-		l.Println(red, "CAN NOT READ FILE:", src, "\n ERROR:", err)
-	}
-
-	sum := hash.Sum(nil)
-
-	l.Println(red, "HASH:", sum)
-
-	return sum
-}*/
-
-/*func verifyHash() {
-
-}*/
-
-func main() {
-	/*if len(os.Args) != 3 {
-		f.Printf("usage: %s source destination BUFFERSIZE\n", filepath.Base(os.Args[0]))
-		return
-	}*/
-
-	//l.Println(r)
-
-	threads, err := strconv.ParseInt(os.Args[1], 10, 64)
-	if err != nil {
-		f.Printf("Invalid buffer size: %q\n", err)
-		return
-	}
-	sources := os.Args[2]
-	destination := os.Args[3]
-
-	//Not sure if I need this anymore
-	res1 := strings.HasSuffix(destination, "\\")
-	if !res1 {
-		destination = destination + "\\"
-
-		//	l.Println(red, "Running", destination, r)
-	}
-
-	/*path, err := os.Open(sources)
-	if err != nil {
-		// handle the error and return
-		l.Fatalln("Hello")
-	}
-
-	pathInfo, err := path.Stat()
-	if err != nil {
-		// error handling
-		l.Fatalln("Hello")
-	}
-
-	// IsDir is short for fileInfo.Mode().IsDir()
-	if pathInfo.IsDir() {
-		// file is a directory
-		l.Fatalln("Hello")
-
-	} else {
-		// file is not a directory
-	}
-	defer path.Close()*/
+func TestMain(t *testing.T){
+	sources := "D:\\Minecraft"
+	destination := "E:\\Minecraft"
+	threads := 5
 
 	MakeDir(sources, destination)
 
@@ -209,7 +116,8 @@ func main() {
 	jobs := make(chan int, numJobs)
 	results := make(chan int, numJobs)
 
-	for id := 1; id <= int(threads); id++ {
+
+	for id := 10; id <= int(threads); id++ {
 		go Copy(id, jobs, results, sources, destination)
 	}
 
@@ -225,5 +133,4 @@ func main() {
 		<-results
 	}
 
-	f.Println(r, "Done", tJobs)
 }
